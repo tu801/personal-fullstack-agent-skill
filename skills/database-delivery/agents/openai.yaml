@@ -1,0 +1,4 @@
+interface:
+  display_name: "Database Delivery"
+  short_description: "Schema, migration, and data workflows"
+  default_prompt: "Use $database-delivery to plan schema design, migrations, and operational database changes."

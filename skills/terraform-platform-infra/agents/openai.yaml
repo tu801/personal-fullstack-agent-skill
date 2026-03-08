@@ -1,0 +1,4 @@
+interface:
+  display_name: "Terraform Platform Infra"
+  short_description: "Provision infra with Terraform"
+  default_prompt: "Use $terraform-platform-infra to design or implement Terraform-based platform infrastructure."

@@ -1,0 +1,13 @@
+{
+  "name": "__NAME__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --watch src/main.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

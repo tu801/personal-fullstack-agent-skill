@@ -1,0 +1,12 @@
+{
+  "name": "__NAME__",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build"
+  },
+  "devDependencies": {
+    "nuxt": "^4.1.3"
+  }
+}

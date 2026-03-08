@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Admin Platform"
+  short_description: "Build APIs and admin backends"
+  default_prompt: "Use $api-admin-platform to design or implement an API and admin backend workflow."

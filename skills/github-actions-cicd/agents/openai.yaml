@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Actions CI/CD"
+  short_description: "Delivery pipelines with GitHub Actions"
+  default_prompt: "Use $github-actions-cicd to create or improve GitHub Actions CI/CD workflows."

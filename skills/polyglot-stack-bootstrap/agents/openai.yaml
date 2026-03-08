@@ -1,0 +1,4 @@
+interface:
+  display_name: "Polyglot Stack Bootstrap"
+  short_description: "Scaffold PHP, Python, TS, Next, Nuxt"
+  default_prompt: "Use $polyglot-stack-bootstrap to initialize a multi-team codebase for backend and frontend stacks."
