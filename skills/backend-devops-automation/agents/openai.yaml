@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend DevOps Automation"
+  short_description: "Automate workflows with scripts and CLI tools"
+  default_prompt: "Use $backend-devops-automation to design or implement backend and DevOps automation via shell, Bash, Makefile, and Node.js CLI."
