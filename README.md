@@ -20,6 +20,6 @@ Với copilot thì chưa có cách để cài skill theo kiểu global giống c
 - Dùng script tự động tạo link trong mỗi dự án mới:
 
 ```Bash
-ln -s ~/[Path-to-repo]/personal-fullstack-agent-skill/skills .github/skills
-ln -s ~/[Path-to-repo]/personal-fullstack-agent-skill/agents .github/agents
+ln -s ~/[Path-to-repo]/skills .github/skills
+ln -s ~/[Path-to-repo]/agents .github/agents
 ```
