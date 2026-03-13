@@ -21,4 +21,5 @@ Với copilot thì chưa có cách để cài skill theo kiểu global giống c
 
 ```Bash
 ln -s ~/[Path-to-repo]/personal-fullstack-agent-skill/skills .github/skills
+ln -s ~/[Path-to-repo]/personal-fullstack-agent-skill/agents .github/agents
 ```
