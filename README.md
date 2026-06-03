@@ -23,3 +23,11 @@ Với copilot thì chưa có cách để cài skill theo kiểu global giống c
 ln -s ~/[Path-to-repo]/skills .github/skills
 ln -s ~/[Path-to-repo]/agents .github/agents
 ```
+
+## Claude Code
+
+Copy CLAUDE.md vào claude để apply global config cho toàn bộ dự án
+
+```sh
+cp ./claude/CLAUDE.md ~/.claude/CLAUDE.md
+```
