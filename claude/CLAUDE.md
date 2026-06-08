@@ -384,7 +384,6 @@ Mô tả cách rollback nếu phát sinh lỗi.
 - **Naming:** Sử dụng camelCase cho biến/hàm, PascalCase cho Class/Component.
 - **API Standards:** Tuân thủ nghiêm ngặt chuẩn RESTful API. Mọi response phải có định dạng JSON đồng nhất chứa: `status`, `data`, `error`, `metadata`.
 - **Security:** Luôn validate dữ liệu đầu vào, áp dụng Rate Limiting, CORS, mã hóa mật khẩu và kiểm tra JWT. Không bao giờ hardcode mã bí mật (Secret keys).
-- **Comment:** Mọi đoạn code phải comment rõ ràng bằng tiếng anh, trên từng function phải có mô tả kỹ tính năng, input/output giá trị là gì, tác dụng của từng biến và ví dụ cách xài cho function
 
 ## 4. DevOps & CI/CD Practices
 
@@ -419,3 +418,15 @@ phải tự thực hiện security review và kiểm tra:
 - Broken Access Control
 
 Trước khi kết thúc task.
+
+## CRITICAL — Code Comment Language
+
+- ALL code comments MUST be written in English ONLY.
+- This rule applies REGARDLESS of the language used in our conversation.
+- Even if I chat with you in Vietnamese, comments in code stay in English.
+- This is non-negotiable and overrides conversational language matching.
+
+## Language Policy
+
+- Conversation/explanation: Vietnamese (theo ngôn ngữ tôi dùng).
+- Code, comments, variable names: English ONLY.
