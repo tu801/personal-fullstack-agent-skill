@@ -162,9 +162,34 @@ Hệ thống quét theo mô hình **defense-in-depth**: **5 tầng cốt lõi** 
 - **Đầu vào (env):** `DEP_STATUS`, `IMAGE_STATUS`, `CONFIG_STATUS`, `SECRET_STATUS`,
   `SEMGREP_STATUS`, `RULES_STATUS` (`success`|`failure`|`skipped`); `TRIVY_INSTALL`,
   `GITLEAKS_INSTALL` (`ok`|`checksum-failed`|`download-failed`); `GITHUB_SHA`, `PR_NUMBER`, `BASE_IMAGE`.
-- **Đầu ra:** Markdown ra stdout (đã cap 15/section + giới hạn 60k ký tự).
+- **Đầu ra:** Markdown ra stdout (đã cap 15/section + giới hạn 60k ký tự). Bảng tổng hợp đầu
+  báo cáo có **2 cột trạng thái tách bạch** (xem **Mục 5.1**): `Status` (tool có chạy không) và
+  `Result` (mức độ nghiêm trọng của phát hiện).
 - Formatter **project-agnostic** → dùng nguyên template ở **Mục 10.C** (đã hỗ trợ sẵn trạng thái
   `skipped` cho tình huống "không có Dockerfile"). Tình huống "nhiều base image" xem **Mục 7.C**.
+
+#### 5.1 — Bảng tổng hợp: 2 cột `Status` + `Result` (BẮT BUỘC, đã có sẵn trong template)
+Bảng đầu báo cáo có **4 cột**: `Layer | Tool | Status | Result`. Hai cột trạng thái **trực giao** nhau —
+tách bạch để tránh hiểu nhầm "tool chạy xong" = "không có vấn đề":
+
+| Cột | Ý nghĩa | Icon |
+|---|---|---|
+| **Status** | Tool **có chạy được** không (độc lập với findings) | ✅ đã chạy · ⚠️ FAILED (không quét được — KHÔNG phải "sạch") · ⏭️ N/A (tầng không áp dụng) |
+| **Result** | **Mức độ nghiêm trọng** của phát hiện (severity nặng nhất của tầng) | 🔴 CRITICAL/HIGH (hoặc Semgrep ERROR / có secret) · 🟡 MEDIUM/LOW (hoặc WARNING) · ✅ không có issue · — chưa rõ (tool FAILED) · ⏭️ skip |
+
+- Hàm `resultIcon(statusEnv, report, severities)` (Mục 10.C) tính icon `Result`; `severities` là danh
+  sách severity parse từ chính findings của tầng đó (dùng lại đúng parser của section → `Result`
+  luôn khớp với phần chi tiết bên dưới).
+- **Bất biến quan trọng:** `Status` ✅ **không** kéo theo `Result` ✅. Tool chạy xong nhưng có HIGH →
+  `Status=✅`, `Result=🔴`. Đây là điểm thường bị render sai nếu chỉ có 1 cột.
+- Map severity cho từng tool đã xử lý trong template: Trivy vuln/misconfig (CRITICAL/HIGH/MEDIUM/LOW),
+  Semgrep (ERROR→🔴, WARNING/INFO→🟡), Gitleaks (mọi secret→🔴), Firebase rules (CRITICAL/HIGH→🔴, WARNING→🟡).
+  Nếu **thêm tầng mới**, chỉ cần truyền mảng `severities` của tầng đó vào `resultIcon` (xem 5.2).
+
+#### 5.2 — Thêm tầng mới vào bảng (vd tầng heuristic riêng của dự án)
+Khi bổ sung 1 tầng quét mới, để có cột `Result` đúng: parse findings của tầng → mảng severity →
+thêm 1 dòng `summary` dùng `statusIcon(...)` + `resultIcon(..., severities)`. Nếu tầng không có thang
+severity (vd "thiếu/không thiếu") thì map sang `HIGH`/`MEDIUM`/`LOW` tuỳ mức rủi ro rồi truyền vào.
 
 ---
 
@@ -356,6 +381,8 @@ DEP_STATUS=success IMAGE_STATUS=skipped CONFIG_STATUS=success SECRET_STATUS=succ
 - [ ] Mọi scanner **pin version** + **verify checksum** (Trivy/Gitleaks).
 - [ ] `timeout-minutes` + `permissions` tối thiểu + sticky comment `@v3`.
 - [ ] Job luôn xanh (non-blocking); chỉ checksum-fail/tool-fail hiện ⚠️/🟥 trong comment.
+- [ ] Bảng tổng hợp có **2 cột** `Status` + `Result` (Mục 5.1); dry-run kiểm: tầng có HIGH →
+      `Result=🔴` (dù `Status=✅`), tầng chỉ MEDIUM/LOW → 🟡, tầng sạch → ✅, tool FAILED → `Result=—`.
 - [ ] YAML + formatter pass kiểm thử local.
 - [ ] **KHÔNG commit/push.**
 
@@ -611,6 +638,22 @@ function statusIcon(statusEnv, report) {
   return toolOk(statusEnv, report) ? '✅' : '⚠️ FAILED';
 }
 
+// Result reflects the SEVERITY of what was found (orthogonal to whether the tool
+// ran — that's `statusIcon`). Worst severity across the layer's findings wins:
+//   🔴 = CRITICAL/HIGH (or Semgrep ERROR, or any leaked secret)
+//   🟡 = MEDIUM/LOW (or Semgrep WARNING/INFO, or Firebase-rules WARNING)
+//   ✅ = no issues found
+//   ⏭️ = layer skipped (N/A);  — = tool failed, result unknown.
+// `severities` is the list of severity strings parsed from this layer's findings.
+function resultIcon(statusEnv, report, severities) {
+  if (skipped(statusEnv)) return '⏭️';
+  if (!toolOk(statusEnv, report)) return '—';
+  const up = severities.map((s) => String(s || '').toUpperCase());
+  if (up.some((s) => s === 'CRITICAL' || s === 'HIGH' || s === 'ERROR')) return '🔴';
+  if (up.length > 0) return '🟡';
+  return '✅';
+}
+
 function cap(arr, max = MAX_PER_SECTION) {
   return { shown: arr.slice(0, max), extra: Math.max(0, arr.length - max) };
 }
@@ -822,15 +865,26 @@ const baseImage = process.env.BASE_IMAGE || 'base image';
 const trivyInstall = process.env.TRIVY_INSTALL;
 const gitleaksInstall = process.env.GITLEAKS_INSTALL;
 
+// Per-layer severities feeding the Result column (worst severity wins). Reuse the
+// same parsers the sections use, so Result always matches the detail below.
+const depSeverities = trivyVulns(dep).map((v) => v.severity);
+const sastSeverities = semgrepFindings(semgrep)
+  .filter((f) => f.severity === 'ERROR' || f.severity === 'WARNING')
+  .map((f) => f.severity);
+const secretSeverities = gitleaksFindings(gitleaks).map(() => 'HIGH'); // any leaked secret = high
+const imageSeverities = trivyVulns(image).map((v) => v.severity);
+const configSeverities = trivyMisconfigs(config).map((m) => m.severity);
+const rulesSeverities = (Array.isArray(rules) ? rules : []).map((r) => r.severity);
+
 const summary = [
-  '| Layer | Tool | Status |',
-  '|---|---|---|',
-  `| 1. Dependencies (package CVE) | Trivy | ${statusIcon('DEP_STATUS', dep)} |`,
-  `| 2. SAST | Semgrep | ${statusIcon('SEMGREP_STATUS', semgrep)} |`,
-  `| 3. Secrets (git history) | Gitleaks | ${statusIcon('SECRET_STATUS', gitleaks)} |`,
-  `| 4. Container OS CVE | Trivy | ${statusIcon('IMAGE_STATUS', image)} |`,
-  `| 5. Dockerfile/IaC misconfig | Trivy | ${statusIcon('CONFIG_STATUS', config)} |`,
-  `| 6. Firebase Security Rules | heuristic | ${statusIcon('RULES_STATUS', rules)} |`,
+  '| Layer | Tool | Status | Result |',
+  '|---|---|---|---|',
+  `| 1. Dependencies (package CVE) | Trivy | ${statusIcon('DEP_STATUS', dep)} | ${resultIcon('DEP_STATUS', dep, depSeverities)} |`,
+  `| 2. SAST | Semgrep | ${statusIcon('SEMGREP_STATUS', semgrep)} | ${resultIcon('SEMGREP_STATUS', semgrep, sastSeverities)} |`,
+  `| 3. Secrets (git history) | Gitleaks | ${statusIcon('SECRET_STATUS', gitleaks)} | ${resultIcon('SECRET_STATUS', gitleaks, secretSeverities)} |`,
+  `| 4. Container OS CVE | Trivy | ${statusIcon('IMAGE_STATUS', image)} | ${resultIcon('IMAGE_STATUS', image, imageSeverities)} |`,
+  `| 5. Dockerfile/IaC misconfig | Trivy | ${statusIcon('CONFIG_STATUS', config)} | ${resultIcon('CONFIG_STATUS', config, configSeverities)} |`,
+  `| 6. Firebase Security Rules | heuristic | ${statusIcon('RULES_STATUS', rules)} | ${resultIcon('RULES_STATUS', rules, rulesSeverities)} |`,
 ].join('\n');
 
 const sections = [
@@ -843,7 +897,11 @@ const sections = [
 ];
 
 const header = `## 🔒 Security Scan Report${pr ? ` — PR #${pr}` : ''}${sha ? ` (commit ${sha})` : ''}`;
-const note = '> ⚠️ Non-blocking: KHÔNG chặn merge. ⚠️ FAILED nghĩa là tool chưa quét được — KHÔNG phải "sạch".';
+const note = [
+  '> ⚠️ Non-blocking: KHÔNG chặn merge.',
+  '> **Status** = tool có chạy được không? ✅ đã chạy · ⚠️ FAILED (không quét được — KHÔNG phải "sạch") · ⏭️ N/A.',
+  '> **Result** = mức độ nghiêm trọng của phát hiện: 🔴 CRITICAL/HIGH · 🟡 MEDIUM/LOW · ✅ không có · — chưa rõ (tool lỗi).',
+].join('\n');
 
 // Loud, top-level banner when a downloaded binary failed SHA256 verification.
 const checksumFails = [];
@@ -1007,4 +1065,8 @@ process.stdout.write(JSON.stringify(findings));
   vẫn hiển thị lỗi rõ ràng (status table, banner đỏ checksum, annotation `::error::`).
 - **Verify checksum + pin version:** chống supply-chain (artifact bị thay) & build reproducible.
 - **Cap 15/section + tổng số + truncate 60k:** tránh vượt limit comment GitHub (65.536 ký tự).
+- **Tách 2 cột `Status` + `Result`:** cột `Status` chỉ cho biết tool *có chạy được không*, nên
+  nếu chỉ có 1 cột thì tầng "đã quét xong nhưng có HIGH" vẫn hiện ✅ → gây hiểu nhầm là "sạch".
+  Cột `Result` phản ánh **mức độ nghiêm trọng thực tế** (🔴/🟡/✅) lấy từ chính findings, trực giao
+  với `Status`. Đây là tính năng bổ sung **tương thích ngược** (chỉ thêm cột, không đổi logic cũ).
 ```
