@@ -224,7 +224,7 @@ git branch -r
 | Tầng | API (Node/TS) | FE (React/Next/Vue) | Firebase Functions | Monorepo (nhiều package) |
 |---|---|---|---|---|
 | **1 SCA** | quét `.` (tự dò mọi lockfile) | giống | giống | giống — `trivy fs .` tự phủ **mọi** lockfile |
-| **2 SAST** | path `src/`; rule `js,ts,nodejs,owasp` | + dir FE; **thêm** `p/react` (hoặc `p/nextjs`,`p/vue`) | path `functions/`; rule `nodejs,owasp` | **hợp** mọi source dir + **hợp** mọi ruleset |
+| **2 SAST** | path `src/`; rule `js,ts,nodejs,owasp` | + dir FE; **thêm** `p/react` / `p/nextjs` (⚠️ **KHÔNG có `p/vue`** — 404; Vue xem **Mục 7.B**) | path `functions/`; rule `nodejs,owasp` | **hợp** mọi source dir + **hợp** mọi ruleset |
 | **3 Secrets** | full history | giống | giống | giống (repo-wide) |
 | **4 Container OS CVE** | **TỰ ĐỘNG** (auto-detect Dockerfile) | tự động (có Dockerfile→scan, không→N/A) | tự động (thường N/A vì không Dockerfile) | tự động (scan + merge từng Dockerfile) |
 | **5 IaC Misconfig** | Dockerfile | Dockerfile/yaml nếu có | `firebase.json`/yaml (Trivy phủ **giới hạn** Firebase rules) | toàn bộ IaC (Dockerfile/tf/k8s) |
@@ -268,13 +268,56 @@ env:
 Tham số hoá để linh hoạt FE/Firebase. Trong `env`:
 ```yaml
   SAST_PATHS: "src"                                              # ADAPT: vd "src web/src functions/src"
-  SAST_CONFIGS: "p/javascript p/typescript p/nodejs p/owasp-top-ten"  # ADAPT: + p/react / p/nextjs / p/vue
+  SAST_CONFIGS: "p/javascript p/typescript p/nodejs p/owasp-top-ten"  # ADAPT: + p/react / p/nextjs (xem ⚠️ dưới)
 ```
 Step Semgrep dựng `--config` động:
 ```bash
 configs=""; for c in $SAST_CONFIGS; do configs="$configs --config $c"; done
 semgrep scan $configs --json --output semgrep.json $SAST_PATHS
 ```
+
+> ⚠️ **BẮT BUỘC verify pack Semgrep tồn tại trước khi thêm** (giống verify scanner ở Mục 10.A):
+> ```bash
+> curl -sL -o /dev/null -w "%{http_code}\n" "https://semgrep.dev/c/p/<pack>"   # phải = 200
+> ```
+> Pack **không tồn tại** → `semgrep scan` báo lỗi config (**exit code ≥ 2**) → `[ $? -le 1 ]` false →
+> `SEMGREP_STATUS=failure` → report hiện **⚠️ FAILED** (KHÔNG phải "sạch"). Đây là lỗi config, KHÔNG phải lỗi code.
+> - Đã kiểm (2026-06): `p/javascript`, `p/typescript`, `p/nodejs`, `p/owasp-top-ten`, `p/react`, `p/nextjs` → **200**.
+>   **`p/vue` → 404 (KHÔNG tồn tại)** — đừng thêm vào `SAST_CONFIGS`, sẽ làm fail cả tầng SAST.
+
+#### 7.B.1 — Dự án Vue (.vue SFC): bù khoảng trống bằng custom rules cục bộ
+**Vấn đề:** Không có pack `p/vue`. Hơn nữa, Semgrep **có parse `.vue`** nhưng map sang ngôn ngữ `vue`,
+trong khi rule registry js/ts khai báo `languages: [js/ts]` → **không chạy** trên `.vue` (đã verify với
+Semgrep 1.167.0: chỉ ~5 rule chạy, bỏ sót `eval`/`innerHTML` trong `<script>`). Tức là logic `.ts/.js`
+được phủ đầy đủ, còn `<script>`/`<template>` trong `.vue` gần như **không** được packs phủ.
+
+**Cách xử lý (đã áp dụng & nghiệm thu cho repo Vue 3):** thêm rules cục bộ dùng `languages: [generic]` +
+`pattern-regex` (chạy trên text thô, bất kể ngôn ngữ), **scope `paths.include: ['*.vue']`** để không trùng
+với packs đã phủ `.ts/.js`:
+1. Tạo file `.github/semgrep/vue-security.yml` với các rule bắt sink XSS/code-injection trong `.vue`:
+   `v-html` (template XSS), `.innerHTML =`, `eval(`, `document.write(`, `new Function(`.
+   ```yaml
+   rules:
+     - id: vue-v-html-xss
+       languages: [generic]
+       severity: WARNING
+       message: v-html renders raw HTML — XSS sink; sanitize (DOMPurify) or avoid.
+       paths: { include: ['*.vue'] }
+       pattern-regex: 'v-html\s*='
+     # + vue-eval-usage (\beval\s*\(), vue-inner-html-assignment (\.innerHTML\s*=),
+     #   vue-document-write (document\.write\s*\(), vue-new-function (\bnew\s+Function\s*\()
+   ```
+   > 💡 **Đặt rules trong `.github/semgrep/`** (không phải `.semgrep/` ở gốc): code này chỉ chạy trong
+   > CI và do devops maintain → gom vào `.github` cho gọn, dev FE không phải bận tâm. **Lợi ích phụ:** nhiều
+   > repo có `.gitignore` chứa `.*` (ignore mọi dot-dir) → `.semgrep/` ở gốc sẽ bị bỏ qua khi commit, làm CI
+   > lỗi `--config`; đặt dưới `.github/` (thường đã được track) thì tránh hẳn vấn đề này.
+2. Nối `.github/semgrep` vào `SAST_CONFIGS` (loop `--config` tự nạp mọi `.yml` trong thư mục):
+   `SAST_CONFIGS: "p/javascript p/typescript p/nodejs p/owasp-top-ten .github/semgrep"`.
+   > ⚠️ Chỉ thêm path này **khi thư mục tồn tại & được git track** — `--config <path>` trỏ vào path không có
+   > (hoặc bị gitignore nên CI không checkout) sẽ làm semgrep lỗi → SAST FAILED. Dự án không phải Vue thì
+   > **không** thêm (giữ template gốc Mục 10.B).
+3. **(Khuyến nghị bổ sung, không thuộc tool)** XSS qua `v-html` nằm ở `<template>` — lớp chặn tốt nhất là
+   ESLint: bật `eslint-plugin-vue` rule `vue/no-v-html` (preset `vue3-recommended`, không có trong `vue3-essential`).
 
 ### 7.C — Container (tầng 4): TỰ ĐỘNG (không cần thao tác tay)
 Step container ở **Mục 10.B** đã **auto-detect** giống tầng 6 — **không** cần xoá/sửa tay:
@@ -431,7 +474,7 @@ env:
   GITLEAKS_VERSION: 8.18.4
   SEMGREP_VERSION: 1.166.0
   SAST_PATHS: "src"                                                   # ADAPT[3]: dir source (FE/functions…)
-  SAST_CONFIGS: "p/javascript p/typescript p/nodejs p/owasp-top-ten"  # ADAPT[4]: + p/react/p/nextjs/p/vue
+  SAST_CONFIGS: "p/javascript p/typescript p/nodejs p/owasp-top-ten"  # ADAPT[4]: + p/react/p/nextjs (verify 200). KHÔNG có p/vue → Vue dùng .github/semgrep, xem Mục 7.B.1
 
 jobs:
   scan:
