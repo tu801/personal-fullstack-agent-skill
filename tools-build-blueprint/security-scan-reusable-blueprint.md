@@ -324,7 +324,7 @@ Step container ở **Mục 10.B** đã **auto-detect** giống tầng 6 — **kh
 - **0 Dockerfile** → `IMAGE_STATUS=skipped` (⏭️ N/A).
 - **1 Dockerfile** → resolve `FROM` → `trivy image`.
 - **≥2 Dockerfile** (monorepo) → loop từng Dockerfile, scan từng base image, **merge** JSON bằng `jq`
-  (`jq` có sẵn trên `ubuntu-latest`); `BASE_IMAGE` = danh sách image (ngăn cách bởi dấu phẩy).
+  (`jq` có sẵn trên runner mặc định `ubuntu-latest-large`); `BASE_IMAGE` = danh sách image (ngăn cách bởi dấu phẩy).
 
 > **Giới hạn:** lấy `FROM` **đầu tiên** mỗi Dockerfile — với multi-stage build, base của stage cuối
 > (runtime image thật) có thể bị bỏ sót. Nếu cần chính xác cho multi-stage: chỉnh để lấy `FROM` cuối.
@@ -372,20 +372,28 @@ Bộ pattern + severity + URL: xem **Mục 10.D**.
   `gitleaks-action` (yêu cầu license cho org) — dùng **Gitleaks CLI binary**. Tránh CodeQL
   trên repo **private** (cần GitHub Advanced Security, tốn phí) — dùng **Semgrep OSS**.
 - **⚠️ Giới hạn đã biết — rate-limit (KHÔNG phải lỗi code):** `trivy fs`/`trivy image` kéo vuln DB từ
-  **GHCR** và pull base image từ **Docker Hub** — đều có anonymous rate-limit theo IP runner dùng chung.
-  Khi bị giới hạn → tầng 1/4 hiện **⚠️ FAILED** dù dự án không có vấn đề. Giảm thiểu: đã bật **cache
-  Trivy DB** (Mục 10.B) + chạy lại PR; nếu hay dính → *(optional)* `docker login` Docker Hub bằng secret
-  token trước `trivy image` để nâng hạn mức, và/hoặc set `TRIVY_DB_REPOSITORY` sang mirror.
-- **Phụ thuộc Python (tầng 2 — Semgrep):** Semgrep cài qua `pip3` → cần `python3`/`pip3` trên runner
-  (mặc định có trên `ubuntu-latest`). **AI Agent nên báo coder kiểm tra runtime thực tế tại thời điểm
-  triển khai**; nếu runner/image không có pip → thêm `- uses: actions/setup-python@<bản mới nhất>`
-  trước step Semgrep.
-- **Kiến trúc runner (mặc định x64):** template tải binary Trivy/Gitleaks bản **x64**
-  (`Linux-64bit` / `linux_x64`) — đúng cho `ubuntu-latest`. Nếu dự án dùng **runner ARM**
-  (`ubuntu-24.04-arm`) hoặc **self-hosted/org runner** khác kiến trúc → asset x64 **sai arch** →
-  Trivy/Gitleaks ⚠️ FAILED. **AI Agent PHẢI hỏi/báo dev xác nhận loại runner của dự án tại thời điểm
-  tạo tool** (mỗi dự án có thể dùng runner org riêng); nếu không phải x64 → đổi tên asset sang arch
-  tương ứng (vd `Linux-ARM64` / `linux_arm64`) hoặc detect động qua `uname -m`.
+  **GHCR** và pull base image từ **Docker Hub** — đều có anonymous rate-limit theo IP runner.
+  Runner mặc định `dena-fixed-ip` có **fixed IP** (không dùng chung pool IP với toàn bộ tenant
+  GitHub-hosted) → giảm đáng kể rủi ro dính rate-limit chéo. Khi vẫn bị giới hạn → tầng 1/4 hiện
+  **⚠️ FAILED** dù dự án không có vấn đề. Giảm thiểu: đã bật **cache Trivy DB** (Mục 10.B) + chạy lại
+  PR; nếu hay dính → *(optional)* `docker login` Docker Hub bằng secret token trước `trivy image`
+  để nâng hạn mức, và/hoặc set `TRIVY_DB_REPOSITORY` sang mirror.
+- **Phụ thuộc Python (tầng 2 — Semgrep):** Semgrep cài qua `pip3` → cần `python3`/`pip3` trên runner.
+  Runner mặc định `dena-fixed-ip` / `ubuntu-latest-large` **đã có sẵn nền tảng Python** → không cần
+  setup thêm. Chỉ khi user đổi sang runner/image khác không có pip → thêm
+  `- uses: actions/setup-python@<bản mới nhất>` trước step Semgrep.
+- **Runner MẶC ĐỊNH của org:** template dùng runner group của org:
+  ```yaml
+  runs-on:
+    group: dena-fixed-ip
+    labels: ubuntu-latest-large
+  ```
+  Runner này **đã có sẵn quyền cần thiết + nền tảng Python (python3/pip3)** cho tool, có **fixed IP**,
+  và là **x64** — khớp với asset binary trong template (`Linux-64bit` / `linux_x64`).
+  **AI Agent PHẢI confirm lại với user tại thời điểm tạo tool xem có cần đổi runner cho dự án đích
+  không** (mỗi dự án có thể dùng runner riêng). Nếu user chọn runner khác kiến trúc (vd ARM
+  `ubuntu-24.04-arm`) → asset x64 **sai arch** → Trivy/Gitleaks ⚠️ FAILED; phải đổi tên asset sang
+  arch tương ứng (vd `Linux-ARM64` / `linux_arm64`) hoặc detect động qua `uname -m`.
 
 ---
 
@@ -415,6 +423,8 @@ DEP_STATUS=success IMAGE_STATUS=skipped CONFIG_STATUS=success SECRET_STATUS=succ
 ```
 
 **Checklist nghiệm thu:**
+- [ ] **Runner: đã confirm với user** — mặc định dùng `group: dena-fixed-ip` + `labels: ubuntu-latest-large`
+      (Mục 8); nếu user yêu cầu runner khác → kiểm tra lại arch asset (x64/ARM).
 - [ ] Trigger đúng nhánh deploy của dự án (`on.pull_request.branches`).
 - [ ] Các tầng áp dụng đều có step + set `*_STATUS`; tầng không áp dụng set `skipped` (⏭️ N/A).
 - [ ] Nếu là dự án Firebase: tầng 6 bật + `scan-firebase-rules.mjs` đã copy; nếu không: tầng 6 `skipped` hoặc đã gỡ đúng cách (cả step lẫn formatter).
@@ -479,7 +489,11 @@ env:
 jobs:
   scan:
     name: Scan & report
-    runs-on: ubuntu-latest # ADAPT (xem Mục 8): template tải binary x64. Nếu org dùng runner ARM/self-hosted → báo dev + đổi asset arch.
+    # DEFAULT runner của org (xem Mục 8): fixed IP + sẵn python3/pip3, x64 (khớp asset Linux-64bit/linux_x64).
+    # AI Agent PHẢI confirm lại với user xem dự án đích có cần dùng runner khác không trước khi sinh file.
+    runs-on:
+      group: dena-fixed-ip
+      labels: ubuntu-latest-large
     timeout-minutes: 15
     steps:
       # ⚠️ ADAPT (xem N8): cập nhật node-version (Node LTS mới nhất) + version các action
@@ -589,9 +603,9 @@ jobs:
           [ $? -eq 0 ] && echo "SECRET_STATUS=success" >> "$GITHUB_ENV" || echo "SECRET_STATUS=failure" >> "$GITHUB_ENV"
           exit 0
 
-      # ⚠️ Semgrep cài qua pip → phụ thuộc python3/pip3 (có sẵn trên ubuntu-latest). Nếu đổi
-      #    runner/image không có pip → step FAILED. Xem Mục 8 (AI Agent nên báo coder kiểm tra
-      #    runtime thực tế tại thời điểm đó; nếu cần: thêm `- uses: actions/setup-python@<latest>`).
+      # ⚠️ Semgrep cài qua pip → phụ thuộc python3/pip3 (đã có sẵn trên runner mặc định
+      #    dena-fixed-ip / ubuntu-latest-large). Nếu user đổi sang runner/image không có pip →
+      #    step FAILED. Xem Mục 8 (nếu cần: thêm `- uses: actions/setup-python@<latest>`).
       - name: 'Semgrep: SAST'
         run: |
           set +e
