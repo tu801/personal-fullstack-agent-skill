@@ -31,3 +31,5 @@ Copy CLAUDE.md vào claude để apply global config cho toàn bộ dự án
 ```sh
 cp ./claude/CLAUDE.md ~/.claude/CLAUDE.md
 ```
+
+Trong tình huống có thiết lập knowledge base thì thêm khối nội dung trong file claude/CLAUDE_MD_SNIPPET.md vào
