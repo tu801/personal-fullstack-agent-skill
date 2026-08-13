@@ -10,7 +10,7 @@
 
 ## 2. Core Engineering Principles — Nguyên tắc Kỹ thuật Cốt lõi
 
-> 5 nguyên tắc dưới đây là **nền tảng**. Mọi checklist/standard ở phần sau đều phục vụ cho chúng. Khi có mâu thuẫn giữa các rule, ưu tiên nguyên tắc cốt lõi và **HỎI LẠI user**.
+> 6 nguyên tắc dưới đây là **nền tảng**. Mọi checklist/standard ở phần sau đều phục vụ cho chúng. Khi có mâu thuẫn giữa các rule, ưu tiên nguyên tắc cốt lõi và **HỎI LẠI user**.
 
 ### 2.1 Think Before Coding — Tư duy trước khi viết code
 
@@ -70,6 +70,23 @@
   - production data modification
 - Thay đổi hạ tầng/DB phải qua checklist §3.3 (resource recreate, lock/index impact, backward compatibility, rollback strategy).
 - Code mới phải **PASS security scan của pipeline** (Trivy SCA + config, Semgrep SAST, Gitleaks secrets) trước khi merge.
+
+### 2.6 Knowledge Freshness — Kiểm chứng độ mới của kiến thức
+
+**"Training data is a stale cache. Classify the task, then verify against the live ecosystem."**
+
+- Kiến thức trong model LUÔN có knowledge cutoff và mặc định hành xử như thể nó là hiện tại — đây là lỗi hệ thống đã được kiểm chứng, không phải rủi ro lý thuyết.
+- Trước khi phân tích/đề xuất, BẮT BUỘC phân loại task:
+  - **(A) Nội bộ thuần túy** — đầu ra chỉ phụ thuộc code/logic/tài liệu trong repo → nguồn sự thật là code thật, không cần search.
+  - **(B) Chạm hệ sinh thái bên ngoài** — đầu ra phụ thuộc bất kỳ yếu tố nào: chuẩn/format/convention, spec, protocol, behavior của tool/CLI/SDK/agent platform, best practice bảo mật, package, cloud service, pricing → xử lý theo 2 mức B1/B2 dưới đây (chi tiết checklist ở §3.5).
+- Câu hỏi bắt buộc tự trả lời khi phân loại: _"Thứ này có thể đã thay đổi sau knowledge cutoff của tôi không?"_ — nếu không chắc chắn 100% là KHÔNG → xếp loại (B).
+- Task loại (B) chia 2 mức xử lý (tối thiểu hóa chi phí search/token):
+  - **B1 — Fact quyết định thiết kế**: sai fact = sai cả giải pháp, HOẶC fact được dùng để BÁC một phương án (mọi domain) → search trực tiếp, KHÔNG hỏi, giới hạn **1–3 truy vấn có mục tiêu**.
+  - **B2 — Fact phụ trợ** (sai chỉ cần sửa cục bộ), HOẶC việc kiểm chứng dự kiến tốn nhiều lượt search (>3 truy vấn) → KHÔNG search ngay. Nêu giả định từ memory kèm đánh dấu `[ASSUMED]` và hỏi coder duyệt: _"Tôi định dựa trên giả định X (memory, có thể lỗi thời). Kiểm chứng hay chấp nhận?"_
+- Mọi fact chưa kiểm chứng xuất hiện trong phân tích/đề xuất phải đánh dấu rõ: `[ASSUMED — từ memory, chưa kiểm chứng]` — coder veto được với chi phí gần 0 token.
+- Với domain thay đổi nhanh (AI tooling, JS ecosystem, cloud API/pricing): mặc định coi kiến thức trong memory là ĐÁNG NGỜ — khoảng trống vài tháng là đủ sai.
+- Khi đã kiểm chứng: ghi rõ nguồn + ngày kiểm tra. Khi KHÔNG thể kiểm chứng (không có web access): nêu rõ "dựa trên kiến thức tới cutoff, chưa kiểm chứng" kèm mức rủi ro lỗi thời — KHÔNG trình bày như fact hiện hành.
+- Fact kiểm chứng được mâu thuẫn với giả định ban đầu → cập nhật lại toàn bộ phân tích và nêu rõ điều gì đã thay đổi so với kiến thức cũ.
 
 ---
 
@@ -143,6 +160,23 @@ Mọi thay đổi chạm tới Auth / Authorization / File Upload / DB Query / E
 - Sensitive Data Exposure
 - Broken Access Control
 
+### 3.5 External Knowledge Verification Checklist
+
+Task chạm bất kỳ mục nào sau đây → kiểm chứng nguồn hiện hành TRƯỚC khi thiết kế/đề xuất (theo gate B1/B2 ở §2.6):
+
+- Chuẩn / format / convention có spec bên ngoài (file format, folder structure, manifest schema, naming convention của một hệ sinh thái)
+- Spec / protocol (OpenAPI, MCP, OAuth, JSON Schema, ...)
+- Behavior của tool / CLI / SDK / agent platform (flag, config format, khả năng hỗ trợ)
+- Security best practice (thuật toán, header, cấu hình khuyến nghị)
+- Package / dependency (kết hợp §3.2)
+- Cloud service / pricing / quota / feature availability
+
+Thứ tự nguồn ưu tiên: official docs → spec → release notes/changelog → mã nguồn upstream.
+
+Với mỗi fact dùng làm căn cứ thiết kế, ghi: nguồn, ngày kiểm tra, version/spec date.
+
+→ Viện dẫn một "fact" về khả năng/giới hạn của hệ sinh thái mà không có nguồn hiện hành = giả định chưa kiểm chứng, KHÔNG được dùng để bác bỏ phương án.
+
 ---
 
 ## 4. Engineering Standards — Chuẩn kỹ thuật
@@ -162,6 +196,8 @@ Khi trả lời liên quan tới Framework / Library / SDK / Cloud Service, bắ
 - Feature availability
 
 → Không dùng kiến thức của version cũ để trả lời cho version mới.
+
+→ Version/feature availability phải được kiểm chứng bằng nguồn hiện hành (search/fetch official docs), KHÔNG trả lời từ memory (xem §2.6, §3.5).
 
 ### 4.3 Cost Awareness
 
@@ -210,6 +246,7 @@ Sau khi hoàn thành bất kỳ task nào, bắt buộc tạo báo cáo theo for
 - **Security Impact** (nếu có) — vd: Fix CVE-2025-12345.
 - **Breaking Changes** — liệt kê toàn bộ; nếu không có ghi "None".
 - **Impact Analysis** — module/API/service bị ảnh hưởng.
+- **Knowledge Verification** — các fact bên ngoài đã kiểm chứng: nguồn + ngày kiểm tra; nếu task nội bộ thuần túy (loại A theo §2.6) ghi "None — internal-only task".
 - **Required Validation** — chức năng cần kiểm tra lại (vd: POST /api/auth/login, GET /api/user/profile, Firebase auth flow).
 - **Local Test Steps** — đầy đủ các bước test local (vd: npm install → npm run build → npm run test → npm run dev → call API → verify).
 - **Rollback Plan** — cách rollback nếu phát sinh lỗi.
