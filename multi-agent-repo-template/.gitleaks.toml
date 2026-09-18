@@ -1,0 +1,13 @@
+# Gitleaks configuration for the CI secret-scan gate (.github/workflows/docs-ci.yml).
+# Extends the built-in ruleset; add path allowlists ONLY for folders whose contents are
+# committed on purpose and documented in a decision file (agents-doc/decisions/).
+
+[extend]
+useDefault = true
+
+# `gitleaks dir` walks the filesystem and does not read .gitignore, so it also sees local
+# build output and local env files. Both are gitignored and never committed. A real secret
+# in tracked source is still a CI failure.
+[[allowlists]]
+description = "Local build output and env files (gitignored)"
+paths = ['''(^|/)dist/''', '''(^|/)node_modules/''', '''(^|/)\.env(\..+)?$''']

@@ -1,0 +1,14 @@
+# Normalize line endings so the repo behaves identically on macOS, Linux and Windows
+# (multi-agent, multi-machine: a CRLF checkout would make format checks fail on a clean clone).
+* text=auto eol=lf
+
+# Binary assets must never be normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.xlsx binary
+*.woff binary
+*.woff2 binary

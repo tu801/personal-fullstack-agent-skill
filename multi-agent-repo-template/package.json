@@ -1,0 +1,15 @@
+{
+  "name": "multi-agent-repo-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Template: rules, skills, decisions, handoff and plans so that Claude Code, Codex, Gemini and Copilot can work on one repo without stepping on each other.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "decisions:index": "node scripts/decisions-index.mjs",
+    "lint:docs": "node scripts/decisions-index.mjs --check && node scripts/mcp-configs-check.mjs",
+    "lint": "pnpm lint:docs"
+  }
+}

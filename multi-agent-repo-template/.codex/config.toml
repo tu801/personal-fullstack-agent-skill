@@ -1,0 +1,8 @@
+# MCP server `example` for Codex CLI. Derived from `.mcp.json` (the source of truth) — keep the
+# command and args identical; `pnpm lint:docs` (scripts/mcp-configs-check.mjs) fails on drift.
+# Codex reads this file only when the project is trusted. Run codex from the repo root.
+
+[mcp_servers.example]
+command = "node"
+args = ["tools/example-mcp/server.mjs"]
+cwd = "."

@@ -1,0 +1,61 @@
+# Quality gate for the agent-facing docs and the shared MCP client configs.
+# Runs on pull requests targeting the default branch only — pushes to feature branches run
+# nothing, to keep the free Actions quota for the real build (adopt the same rule for the
+# project's own CI, or merge these jobs into it).
+#
+# Extend this file with the project's real pipeline in this order (coding.md §7):
+#   format/lint → typecheck → unit test → build → dependency audit; integration/E2E; secret scan.
+
+name: Docs CI
+
+on:
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+
+jobs:
+  docs:
+    name: Decisions index + MCP client configs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Zero dependencies: plain Node scripts, no install step.
+      - name: Decisions index is up to date
+        run: node scripts/decisions-index.mjs --check
+
+      - name: MCP client configs agree with .mcp.json
+        run: node scripts/mcp-configs-check.mjs
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The gitleaks binary is used directly instead of gitleaks-action: the action requires a
+      # paid GITLEAKS_LICENSE for organization-owned repositories, the CLI itself does not.
+      # Version is pinned for reproducible scans.
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks gitleaks.tar.gz
+
+      - name: Scan working tree
+        run: gitleaks dir . --config .gitleaks.toml --redact --verbose

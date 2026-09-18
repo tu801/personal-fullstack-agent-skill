@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "example": {
+      "type": "stdio",
+      "command": "node",
+      "cwd": "${workspaceFolder}",
+      "args": ["${workspaceFolder}/tools/example-mcp/server.mjs"]
+    }
+  }
+}
